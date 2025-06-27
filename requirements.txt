@@ -1,0 +1,12 @@
+pip install numpy
+pip install pandas 
+pip install matplotlib 
+pip install plotly
+pip install scipy 
+pip install seaborn 
+pip install scikit-learn 
+pip install xgboost 
+pip install ipython 
+pip install json5 
+pip install warnings 
+pip install google
