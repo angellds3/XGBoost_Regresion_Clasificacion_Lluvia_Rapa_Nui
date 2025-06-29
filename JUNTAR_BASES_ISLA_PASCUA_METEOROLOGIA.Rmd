@@ -1,0 +1,1364 @@
+---
+title: "Untitled"
+author: "Angel Llanos"
+date: "2025-06-13"
+output: html_document
+---
+
+
+# Precipitaciones
+
+## Juntar todas las bases desde 2019 a 2025
+
+```{r, warning=FALSE, message=" ", echo=FALSE}
+library(readr)
+library(dplyr)
+library(purrr)
+library(stringr)
+
+# Nueva ruta para Isla de Pascua
+ruta <- "C:/Users/angel/Documents/ISLA_PASCUA/PRECIPITACIONES"
+
+# 1) Listar los CSV semicolon-separated de la estación 270001 (AAAAMM en el medio)
+archivos <- list.files(
+  path       = ruta,
+  pattern    = "^270001_[0-9]{6}_AguaCaida\\.csv$",
+  full.names = TRUE
+) %>%
+  # Filtrar solo entre enero 2019 y mayo 2025
+  keep(~ {
+    fecha_txt <- str_extract(basename(.x), "(?<=_)[0-9]{6}(?=_)")
+    fecha     <- as.Date(paste0(fecha_txt, "01"), "%Y%m%d")
+    fecha >= as.Date("2019-01-01") && fecha <= as.Date("2025-05-01")
+  })
+
+# 2) Leer y concatenar todas las filas, usando ';' como separador
+Agua_Caida_270001_2019_2025 <- archivos %>%
+  set_names() %>%  
+  map_dfr(
+    ~ read_delim(.x,
+                 delim = ";",
+                 locale = locale(decimal_mark = ".", encoding = "UTF-8")),
+    .id = "origen"
+  )
+
+# Si tus datos usan coma como decimal, en lugar de punto, usa:
+# map_dfr(~ read_csv2(.x, locale = locale(encoding = "UTF-8")), .id = "origen")
+
+# (Opcional) Eliminar columna 'origen' si no la necesitas
+# Agua_Caida_270001_2019_2025 <- select(Agua_Caida_270001_2019_2025, -origen)
+
+```
+
+## JUNTAR POR HORA
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+Agua_Caida_270001_2019_2025_horaria <- Agua_Caida_270001_2019_2025 %>%
+  # 1) Seleccionar sólo lo necesario
+  select(codigoNacional, momento, rrInst) %>%
+  # 2) Asegurar que 'momento' es POSIXct
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
+  ) %>%
+  # 3) Redondear hacia abajo al inicio de la hora
+  mutate(
+    momento = floor_date(momento, unit = "hour")
+  ) %>%
+  # 4) Agrupar y sumar rrInst en rr1Hora
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    rr1Hora = sum(rrInst, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+```{r}
+
+```
+
+
+
+## JUNTAR POR 2 HORAS
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+Agua_Caida_270001_2019_2025_2horas <- Agua_Caida_270001_2019_2025 %>%
+  # 1) Seleccionar columnas clave
+  select(codigoNacional, momento, rrInst) %>%
+  # 2) Asegurar POSIXct y pisar al bloque de 2 horas
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "2 hours")
+  ) %>%
+  # 3) Agrupar por estación y bloque de 2 horas, sumar precipitación
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    rr2Horas = sum(rrInst, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Ejemplo de salida:
+head(Agua_Caida_270001_2019_2025_2horas)
+
+```
+
+## JUNTAR POR 3 HORAS
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+Agua_Caida_270001_2019_2025_3horas <- Agua_Caida_270001_2019_2025 %>%
+  # 1) Seleccionar columnas clave
+  select(codigoNacional, momento, rrInst) %>%
+  # 2) Asegurar POSIXct y “pisar” al bloque de 3 horas
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    # floor_date soporta múltiplos, p.ej. "3 hours"
+    momento = floor_date(momento, unit = "3 hours")
+  ) %>%
+  # 3) Agrupar por estación y tramo de 3 horas, y sumar precipitación
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    rr3Horas = sum(rrInst, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(Agua_Caida_270001_2019_2025_3horas)
+
+```
+
+
+
+## JUNTAR POR 6 HORAS
+
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+Agua_Caida_270001_2019_2025_6horas <- Agua_Caida_270001_2019_2025 %>%
+  # 1) Seleccionar columnas clave
+  select(codigoNacional, momento, rrInst) %>%
+  # 2) Asegurar POSIXct y “pisar” al bloque de 6 horas
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "6 hours")
+  ) %>%
+  # 3) Agrupar por estación y tramo de 6 horas, y sumar precipitación
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    rr6Horas = sum(rrInst, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Ejemplo de salida
+head(Agua_Caida_270001_2019_2025_6horas)
+
+```
+
+
+
+# Temperaturas (aire seco ts y al punto de rocio td)
+
+
+
+## Juntar todas las bases desde 2019 a 2025
+
+```{r}
+library(readr)
+library(dplyr)
+library(purrr)
+library(stringr)
+
+# Nueva ruta para los CSV de temperatura
+ruta <- "C:/Users/angel/Documents/ISLA_PASCUA/TEMPERATURA"
+
+# 1) Listar los CSV semicolon-separated de la estación 270001 (_AAAAMM_Temperatura.csv)
+archivos <- list.files(
+  path       = ruta,
+  pattern    = "^270001_[0-9]{6}_Temperatura\\.csv$",
+  full.names = TRUE
+) %>%
+  # Filtrar solo entre enero 2019 y mayo 2025
+  keep(~ {
+    fecha_txt <- str_extract(basename(.x), "(?<=_)[0-9]{6}(?=_)")
+    fecha     <- as.Date(paste0(fecha_txt, "01"), "%Y%m%d")
+    fecha >= as.Date("2019-01-01") && fecha <= as.Date("2025-05-01")
+  })
+
+# 2) Leer y concatenar todas las filas, usando ';' como separador
+Temperatura_270001_2019_2025 <- archivos %>%
+  set_names() %>%  
+  map_dfr(
+    ~ read_delim(.x,
+                 delim = ";",
+                 locale = locale(decimal_mark = ".", encoding = "UTF-8")),
+    .id = "origen"
+  )
+
+# Si tus datos usan coma como separador decimal, en lugar de punto, sustituye por:
+# map_dfr(~ read_csv2(.x, locale = locale(encoding = "UTF-8")), .id = "origen")
+
+# (Opcional) Si no quieres conservar la columna 'origen', elimínala con:
+# Temperatura_270001_2019_2025 <- select(Temperatura_270001_2019_2025, -origen)
+
+```
+
+## JUNTAR POR HORA
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+Temperatura_270001_2019_2025_horaria <- Temperatura_270001_2019_2025 %>%
+  # 1) Seleccionar sólo las columnas de interés
+  select(codigoNacional, momento, ts, td) %>%
+  # 2) Asegurar que 'momento' es POSIXct
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
+  ) %>%
+  # 3) “Pisar” cada timestamp al inicio de la hora
+  mutate(
+    momento = floor_date(momento, unit = "hour")
+  ) %>%
+  # 4) Agrupar por estación y hora, y calcular medias de ts y td
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    ts = mean(ts, na.rm = TRUE),
+    td = mean(td, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(Temperatura_270001_2019_2025_horaria)
+
+```
+
+
+## JUNTAR POR 2 HORAS
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+Temperatura_270001_2019_2025_2horas <- Temperatura_270001_2019_2025 %>%
+  # 1) Seleccionar columnas de interés
+  select(codigoNacional, momento, ts, td) %>%
+  # 2) Convertir 'momento' a POSIXct y “pisar” al bloque de 2 horas
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "2 hours")
+  ) %>%
+  # 3) Agrupar por estación y bloque de 2 h, y calcular el promedio de ts y td
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    ts = mean(ts, na.rm = TRUE),
+    td = mean(td, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(Temperatura_270001_2019_2025_2horas)
+
+```
+
+
+## JUNTAR POR 3 HORAS
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+Temperatura_270001_2019_2025_3horas <- Temperatura_270001_2019_2025 %>%
+  # 1) Seleccionar columnas de interés
+  select(codigoNacional, momento, ts, td) %>%
+  # 2) Convertir 'momento' a POSIXct y “pisar” al bloque de 3 horas
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "3 hours")
+  ) %>%
+  # 3) Agrupar por estación y bloque de 3 h, y calcular el promedio de ts y td
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    ts = mean(ts, na.rm = TRUE),
+    td = mean(td, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(Temperatura_270001_2019_2025_3horas)
+
+```
+
+
+
+## JUNTAR POR 6 HORAS
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+Temperatura_270001_2019_2025_6horas <- Temperatura_270001_2019_2025 %>%
+  # 1) Seleccionar columnas de interés
+  select(codigoNacional, momento, ts, td) %>%
+  # 2) Convertir 'momento' a POSIXct y “pisar” al bloque de 6 horas
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "6 hours")
+  ) %>%
+  # 3) Agrupar por estación y bloque de 6 h, y calcular el promedio de ts y td
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    ts = mean(ts, na.rm = TRUE),
+    td = mean(td, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(Temperatura_270001_2019_2025_6horas)
+
+```
+
+
+# Presion y humedad
+
+## Juntar todas las bases desde 2019 a 2025
+
+```{r}
+library(readr)
+library(dplyr)
+library(purrr)
+library(stringr)
+
+# Ruta para los CSV de presión y humedad
+ruta <- "C:/Users/angel/Documents/ISLA_PASCUA/PRESION_HUMEDAD"
+
+# 1) Listar los CSV semicolon-separated de la estación 270001 (_AAAAMM_PresionHumedad.csv)
+archivos <- list.files(
+  path       = ruta,
+  pattern    = "^270001_[0-9]{6}_PresionHumedad\\.csv$",
+  full.names = TRUE
+) %>%
+  # Filtrar solo entre enero 2019 y mayo 2025
+  keep(~ {
+    fecha_txt <- str_extract(basename(.x), "(?<=_)[0-9]{6}(?=_)")
+    fecha     <- as.Date(paste0(fecha_txt, "01"), "%Y%m%d")
+    fecha >= as.Date("2019-01-01") && fecha <= as.Date("2025-05-01")
+  })
+
+# 2) Leer y concatenar todas las filas, usando ';' como separador
+PresionHumedad_270001_2019_2025 <- archivos %>%
+  set_names() %>%  
+  map_dfr(
+    ~ read_delim(.x,
+                 delim = ";",
+                 locale = locale(decimal_mark = ".", encoding = "UTF-8")),
+    .id = "origen"
+  )
+
+# Si tus datos usan coma como separador decimal, en lugar de punto, usa:
+# map_dfr(~ read_csv2(.x, locale = locale(encoding = "UTF-8")), .id = "origen")
+
+# (Opcional) Eliminar columna 'origen' si no la necesitas
+# PresionHumedad_270001_2019_2025 <- select(PresionHumedad_270001_2019_2025, -origen)
+
+```
+
+
+
+
+## JUNTAR POR HORA
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+PresionHumedad_270001_2019_2025_horaria <- PresionHumedad_270001_2019_2025 %>%
+  # 1) Seleccionar sólo lo necesario
+  select(codigoNacional, momento, hr, qff) %>%
+  # 2) Asegurar que 'momento' es POSIXct
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
+  ) %>%
+  # 3) “Pisar” cada timestamp al inicio de la hora
+  mutate(
+    momento = floor_date(momento, unit = "hour")
+  ) %>%
+  # 4) Agrupar por estación y hora, y calcular promedios de hr y qff
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    hr  = mean(hr,  na.rm = TRUE),
+    qff = mean(qff, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(PresionHumedad_270001_2019_2025_horaria)
+
+```
+
+
+## JUNTAR POR 2 HORAS
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+PresionHumedad_270001_2019_2025_2horas <- PresionHumedad_270001_2019_2025 %>%
+  # 1) Seleccionar sólo las columnas necesarias
+  select(codigoNacional, momento, hr, qff) %>%
+  # 2) Convertir 'momento' a POSIXct y “pisar” al bloque de 2 horas
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "2 hours")
+  ) %>%
+  # 3) Agrupar por estación y bloque de 2 horas, y calcular promedios
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    hr  = mean(hr,  na.rm = TRUE),
+    qff = mean(qff, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(PresionHumedad_270001_2019_2025_2horas)
+
+```
+
+## JUNTAR POR 3 HORAS
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+PresionHumedad_270001_2019_2025_3horas <- PresionHumedad_270001_2019_2025 %>%
+  # 1) Seleccionar sólo las columnas necesarias
+  select(codigoNacional, momento, hr, qff) %>%
+  # 2) Convertir 'momento' a POSIXct y “pisar” al bloque de 3 horas
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "3 hours")
+  ) %>%
+  # 3) Agrupar por estación y bloque de 3 horas, y calcular promedios
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    hr  = mean(hr,  na.rm = TRUE),
+    qff = mean(qff, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(PresionHumedad_270001_2019_2025_3horas)
+
+```
+
+## JUNTAR POR 6 HORAS
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+PresionHumedad_270001_2019_2025_6horas <- PresionHumedad_270001_2019_2025 %>%
+  # 1) Seleccionar las columnas necesarias
+  select(codigoNacional, momento, hr, qff) %>%
+  # 2) Convertir 'momento' a POSIXct y “pisar” al bloque de 6 horas
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "6 hours")
+  ) %>%
+  # 3) Agrupar por estación y bloque de 6 horas, y calcular promedios de hr y qff
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    hr  = mean(hr,  na.rm = TRUE),
+    qff = mean(qff, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(PresionHumedad_270001_2019_2025_6horas)
+
+```
+
+# Nubosidad
+
+## Juntar todas las bases desde 2019 a 2025
+
+```{r}
+library(readr)
+library(dplyr)
+library(purrr)
+library(stringr)
+
+# Ruta para los CSV de nubosidad
+ruta <- "C:/Users/angel/Documents/ISLA_PASCUA/NUBOSIDAD"
+
+# 1) Listar los CSV semicolon-separated de la estación 270001 (_AAAAMM_Nubosidad.csv)
+archivos <- list.files(
+  path       = ruta,
+  pattern    = "^270001_[0-9]{6}_Nubosidad\\.csv$",
+  full.names = TRUE
+) %>%
+  # Filtrar solo entre enero 2019 y mayo 2025
+  keep(~ {
+    fecha_txt <- str_extract(basename(.x), "(?<=_)[0-9]{6}(?=_)")
+    fecha     <- as.Date(paste0(fecha_txt, "01"), "%Y%m%d")
+    fecha >= as.Date("2019-01-01") && fecha <= as.Date("2025-05-01")
+  })
+
+# 2) Leer y concatenar todas las filas, usando ';' como separador
+Nubosidad_270001_2019_2025 <- archivos %>%
+  set_names() %>%
+  map_dfr(
+    ~ read_delim(.x,
+                 delim = ";",
+                 locale = locale(decimal_mark = ".", encoding = "UTF-8")),
+    .id = "origen"
+  )
+
+# (Opcional) Si tus datos usan coma como separador decimal, en lugar de punto:
+# Nubosidad_270001_2019_2025 <- archivos %>%
+#   set_names() %>%
+#   map_dfr(~ read_csv2(.x, locale = locale(encoding = "UTF-8")), .id = "origen")
+
+# (Opcional) Eliminar la columna 'origen' si no la necesitas
+# Nubosidad_270001_2019_2025 <- select(Nubosidad_270001_2019_2025, -origen)
+
+```
+
+## JUNTAR POR HORA
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+Nubosidad_270001_2019_2025_horaria <- Nubosidad_270001_2019_2025 %>%
+  # 1) Seleccionar las columnas de interés
+  select(codigoNacional, momento, isSkyClear) %>%
+  # 2) Asegurar que 'momento' es POSIXct y pisar al inicio de la hora
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "hour")
+  ) %>%
+  # 3) Agrupar por estación y hora
+  group_by(codigoNacional, momento) %>%
+  # 4) Calcular la proporción de minutos con cielo despejado y aplicar el umbral
+  summarise(
+    isSkyClear = as.integer(mean(isSkyClear == 1, na.rm = TRUE) >= 0.1),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(Nubosidad_270001_2019_2025_horaria)
+
+
+```
+
+## JUNTAR POR 2 HORAS
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+Nubosidad_270001_2019_2025_2horas <- Nubosidad_270001_2019_2025 %>%
+  # 1) Seleccionar sólo las columnas necesarias
+  select(codigoNacional, momento, isSkyClear) %>%
+  # 2) Convertir 'momento' a POSIXct y “pisar” al bloque de 2 horas
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "2 hours")
+  ) %>%
+  # 3) Agrupar por estación y bloque de 2 horas
+  group_by(codigoNacional, momento) %>%
+  # 4) Calcular isSkyClear = 1 si en algún minuto dentro del bloque hubo 1, sino 0
+  summarise(
+    isSkyClear = as.integer(any(isSkyClear == 1, na.rm = TRUE)),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(Nubosidad_270001_2019_2025_2horas)
+
+
+```
+
+## JUNTAR POR 3 HORAS
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+Nubosidad_270001_2019_2025_3horas <- Nubosidad_270001_2019_2025 %>%
+  # 1) Seleccionar sólo las columnas necesarias
+  select(codigoNacional, momento, isSkyClear) %>%
+  # 2) Convertir 'momento' a POSIXct y “pisar” al bloque de 3 horas
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "3 hours")
+  ) %>%
+  # 3) Agrupar por estación y bloque de 3 horas
+  group_by(codigoNacional, momento) %>%
+  # 4) Calcular isSkyClear = 1 si en algún minuto dentro del bloque hubo 1, sino 0
+  summarise(
+    isSkyClear = as.integer(any(isSkyClear == 1, na.rm = TRUE)),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(Nubosidad_270001_2019_2025_3horas)
+
+```
+
+## JUNTAR POR 6 HORAS
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+Nubosidad_270001_2019_2025_6horas <- Nubosidad_270001_2019_2025 %>%
+  # 1) Seleccionar sólo las columnas necesarias
+  select(codigoNacional, momento, isSkyClear) %>%
+  # 2) Convertir 'momento' a POSIXct y “pisar” al bloque de 6 horas
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "6 hours")
+  ) %>%
+  # 3) Agrupar por estación y bloque de 6 horas
+  group_by(codigoNacional, momento) %>%
+  # 4) Calcular isSkyClear = 1 si en algún minuto dentro del bloque hubo 1, sino 0
+  summarise(
+    isSkyClear = as.integer(any(isSkyClear == 1, na.rm = TRUE)),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(Nubosidad_270001_2019_2025_6horas)
+
+
+```
+
+
+# Viento
+
+
+## Juntar todas las bases desde 2019 a 2025
+
+```{r}
+library(readr)
+library(dplyr)
+library(purrr)
+library(stringr)
+
+# Ruta para los CSV de viento
+ruta <- "C:/Users/angel/Documents/ISLA_PASCUA/VIENTO"
+
+# 1) Listar los CSV semicolon-separated de la estación 270001 (_AAAAMM_Viento.csv)
+archivos <- list.files(
+  path       = ruta,
+  pattern    = "^270001_[0-9]{6}_Viento\\.csv$",
+  full.names = TRUE
+) %>%
+  # Filtrar solo entre enero 2019 y mayo 2025
+  keep(~ {
+    fecha_txt <- str_extract(basename(.x), "(?<=_)[0-9]{6}(?=_)")
+    fecha     <- as.Date(paste0(fecha_txt, "01"), "%Y%m%d")
+    fecha >= as.Date("2019-01-01") && fecha <= as.Date("2025-05-01")
+  })
+
+# 2) Leer y concatenar todas las filas, usando ';' como separador
+Viento_270001_2019_2025 <- archivos %>%
+  set_names() %>%  
+  map_dfr(
+    ~ read_delim(.x,
+                 delim = ";",
+                 locale = locale(decimal_mark = ".", encoding = "UTF-8")),
+    .id = "origen"
+  )
+
+# (Opcional) Si tus datos usan coma como separador decimal, sustituye por:
+# map_dfr(~ read_csv2(.x, locale = locale(encoding = "UTF-8")), .id = "origen")
+
+# (Opcional) Eliminar la columna 'origen' si no la necesitas
+# Viento_270001_2019_2025 <- select(Viento_270001_2019_2025, -origen)
+
+```
+
+## JUNTAR POR HORA
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+Viento_270001_2019_2025_horaria <- Viento_270001_2019_2025 %>%
+  # 1) Seleccionar sólo las columnas necesarias
+  select(codigoNacional, momento, ddInst, ffInst) %>%
+  # 2) Asegurar que 'momento' es POSIXct
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
+  ) %>%
+  # 3) “Pisar” cada timestamp al inicio de la hora
+  mutate(
+    momento = floor_date(momento, unit = "hour")
+  ) %>%
+  # 4) Agrupar por estación y hora, y calcular promedios de ddInst y ffInst
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    ddInst = mean(ddInst, na.rm = TRUE),
+    ffInst = mean(ffInst, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(Viento_270001_2019_2025_horaria)
+
+```
+
+## JUNTAR POR 2 HORAS
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+Viento_270001_2019_2025_2horas <- Viento_270001_2019_2025 %>%
+  # 1) Seleccionar columnas clave
+  select(codigoNacional, momento, ddInst, ffInst) %>%
+  # 2) Convertir 'momento' a POSIXct y “pisar” al bloque de 2 horas
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "2 hours")
+  ) %>%
+  # 3) Agrupar por estación y bloque de 2 h, y calcular promedios de ddInst y ffInst
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    ddInst = mean(ddInst, na.rm = TRUE),
+    ffInst = mean(ffInst, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(Viento_270001_2019_2025_2horas)
+
+```
+
+## JUNTAR POR 3 HORAS
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+Viento_270001_2019_2025_3horas <- Viento_270001_2019_2025 %>%
+  # 1) Seleccionar columnas clave
+  select(codigoNacional, momento, ddInst, ffInst) %>%
+  # 2) Convertir 'momento' a POSIXct y “pisar” al bloque de 3 horas
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "3 hours")
+  ) %>%
+  # 3) Agrupar por estación y bloque de 3 h, y calcular promedios de ddInst y ffInst
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    ddInst = mean(ddInst, na.rm = TRUE),
+    ffInst = mean(ffInst, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(Viento_270001_2019_2025_3horas)
+
+
+```
+
+## JUNTAR POR 6 HORAS
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+Viento_270001_2019_2025_6horas <- Viento_270001_2019_2025 %>%
+  # 1) Seleccionar columnas clave
+  select(codigoNacional, momento, ddInst, ffInst) %>%
+  # 2) Convertir 'momento' a POSIXct y “pisar” al bloque de 6 horas
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "6 hours")
+  ) %>%
+  # 3) Agrupar por estación y bloque de 6 h, y calcular promedios de ddInst y ffInst
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    ddInst = mean(ddInst, na.rm = TRUE),
+    ffInst = mean(ffInst, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(Viento_270001_2019_2025_6horas)
+
+```
+
+
+# Rango Optico Meteorologico
+
+
+
+
+## Juntar todas las bases desde 2019 a 2025
+
+
+```{r}
+library(readr)
+library(dplyr)
+library(purrr)
+library(stringr)
+
+# Ruta para los CSV de Rango Óptico Meteorológico
+ruta <- "C:/Users/angel/Documents/ISLA_PASCUA/RANGO_OPTICO_METEOROLOGICO"
+
+# 1) Listar los CSV semicolon-separated de la estación 270001 (_AAAAMM_RangoOpticoMeteorologico.csv)
+archivos <- list.files(
+  path       = ruta,
+  pattern    = "^270001_[0-9]{6}_RangoOpticoMeteorologico\\.csv$",
+  full.names = TRUE
+) %>%
+  # Filtrar solo entre enero 2019 y mayo 2025
+  keep(~ {
+    fecha_txt <- str_extract(basename(.x), "(?<=_)[0-9]{6}(?=_)")
+    fecha     <- as.Date(paste0(fecha_txt, "01"), "%Y%m%d")
+    fecha >= as.Date("2019-01-01") && fecha <= as.Date("2025-05-01")
+  })
+
+# 2) Leer y concatenar todas las filas, usando ';' como separador
+RangoOpticoMeteorologico_270001_2019_2025 <- archivos %>%
+  set_names() %>%
+  map_dfr(
+    ~ read_delim(.x,
+                 delim = ";",
+                 locale = locale(decimal_mark = ".", encoding = "UTF-8")),
+    .id = "origen"
+  )
+
+# (Opcional) Si tus datos usan coma como separador decimal, en lugar de punto:
+# RangoOpticoMeteorologico_270001_2019_2025 <- archivos %>%
+#   set_names() %>%
+#   map_dfr(~ read_csv2(.x, locale = locale(encoding = "UTF-8")), .id = "origen")
+
+# (Opcional) Eliminar la columna 'origen' si no la necesitas:
+# RangoOpticoMeteorologico_270001_2019_2025 <- 
+#   select(RangoOpticoMeteorologico_270001_2019_2025, -origen)
+
+```
+
+## JUNTAR POR HORA
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+RangoOpticoMeteorologico_270001_2019_2025_horaria <- RangoOpticoMeteorologico_270001_2019_2025 %>%
+  # 1) Seleccionar sólo las columnas necesarias
+  select(codigoNacional, momento, morInst) %>%
+  # 2) Convertir 'momento' a POSIXct si no lo está y “pisar” al inicio de la hora
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "hour")
+  ) %>%
+  # 3) Agrupar por estación y hora, y calcular el promedio de morInst
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    morInst = mean(morInst, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(RangoOpticoMeteorologico_270001_2019_2025_horaria)
+
+```
+
+## JUNTAR POR 2 HORAS
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+RangoOpticoMeteorologico_270001_2019_2025_2horas <- RangoOpticoMeteorologico_270001_2019_2025 %>%
+  # 1) Seleccionar sólo las columnas necesarias
+  select(codigoNacional, momento, morInst) %>%
+  # 2) Convertir 'momento' a POSIXct si no lo está y “pisar” al bloque de 2 horas
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "2 hours")
+  ) %>%
+  # 3) Agrupar por estación y bloque de 2 horas, y calcular el promedio de morInst
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    morInst = mean(morInst, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(RangoOpticoMeteorologico_270001_2019_2025_2horas)
+
+
+```
+
+## JUNTAR POR 3 HORAS
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+RangoOpticoMeteorologico_270001_2019_2025_3horas <- RangoOpticoMeteorologico_270001_2019_2025 %>%
+  # 1) Seleccionar sólo las columnas necesarias
+  select(codigoNacional, momento, morInst) %>%
+  # 2) Convertir 'momento' a POSIXct si no lo está y “pisar” al bloque de 3 horas
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "3 hours")
+  ) %>%
+  # 3) Agrupar por estación y bloque de 3 horas, y calcular el promedio de morInst
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    morInst = mean(morInst, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(RangoOpticoMeteorologico_270001_2019_2025_3horas)
+
+```
+
+## JUNTAR POR 6 HORAS
+
+```{r}
+# Agrupamiento en bloques de 6 horas
+RangoOpticoMeteorologico_270001_2019_2025_6horas <- RangoOpticoMeteorologico_270001_2019_2025 %>%
+  select(codigoNacional, momento, morInst) %>%
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "6 hours")
+  ) %>%
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    morInst = mean(morInst, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+```
+
+
+# Visibilidad
+
+## Juntar todas las bases desde 2019 a 2025
+
+```{r}
+library(readr)
+library(dplyr)
+library(purrr)
+library(stringr)
+
+# Ruta para los CSV de visibilidad
+ruta <- "C:/Users/angel/Documents/ISLA_PASCUA/VISIBILIDAD"
+
+# 1) Listar los CSV semicolon-separated de la estación 270001 (_AAAAMM_Visibilidad.csv)
+archivos <- list.files(
+  path       = ruta,
+  pattern    = "^270001_[0-9]{6}_Visibilidad\\.csv$",
+  full.names = TRUE
+) %>%
+  # Filtrar solo entre enero 2019 y mayo 2025
+  keep(~ {
+    fecha_txt <- str_extract(basename(.x), "(?<=_)[0-9]{6}(?=_)")
+    fecha     <- as.Date(paste0(fecha_txt, "01"), "%Y%m%d")
+    fecha >= as.Date("2019-01-01") && fecha <= as.Date("2025-05-01")
+  })
+
+# 2) Leer y concatenar todas las filas, usando ';' como separador
+Visibilidad_270001_2019_2025 <- archivos %>%
+  set_names() %>%
+  map_dfr(
+    ~ read_delim(.x,
+                 delim = ";",
+                 locale = locale(decimal_mark = ".", encoding = "UTF-8")),
+    .id = "origen"
+  )
+
+# (Opcional) Si tus datos usan coma como separador decimal, en lugar de punto:
+# Visibilidad_270001_2019_2025 <- archivos %>%
+#   set_names() %>%
+#   map_dfr(~ read_csv2(.x, locale = locale(encoding = "UTF-8")), .id = "origen")
+
+# (Opcional) Eliminar la columna 'origen' si no la necesitas:
+# Visibilidad_270001_2019_2025 <- 
+#   select(Visibilidad_270001_2019_2025, -origen)
+
+```
+
+
+## JUNTAR POR HORA
+
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+Visibilidad_270001_2019_2025_horaria <- Visibilidad_270001_2019_2025 %>%
+  # 1) Seleccionar sólo las columnas necesarias
+  select(codigoNacional, momento, vis1Minuto) %>%
+  # 2) Asegurar que 'momento' es POSIXct y pisar al inicio de la hora
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "hour")
+  ) %>%
+  # 3) Agrupar por estación y hora, y calcular el promedio de vis1Minuto
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    vis1Minuto = mean(vis1Minuto, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(Visibilidad_270001_2019_2025_horaria)
+
+```
+
+
+## JUNTAR POR 2 HORAS
+
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+Visibilidad_270001_2019_2025_2horas <- Visibilidad_270001_2019_2025 %>%
+  # 1) Seleccionar las columnas necesarias
+  select(codigoNacional, momento, vis1Minuto) %>%
+  # 2) Convertir 'momento' a POSIXct y “pisar” al bloque de 2 horas
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "2 hours")
+  ) %>%
+  # 3) Agrupar por estación y bloque de 2 h, y calcular el promedio de vis1Minuto
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    vis2Horas = mean(vis1Minuto, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(Visibilidad_270001_2019_2025_2horas)
+
+```
+
+## JUNTAR POR 3 HORAS
+
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+Visibilidad_270001_2019_2025_3horas <- Visibilidad_270001_2019_2025 %>%
+  # 1) Seleccionar las columnas necesarias
+  select(codigoNacional, momento, vis1Minuto) %>%
+  # 2) Convertir 'momento' a POSIXct y “pisar” al bloque de 3 horas
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "3 hours")
+  ) %>%
+  # 3) Agrupar por estación y bloque de 3 h, y calcular el promedio de vis1Minuto
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    vis3Horas = mean(vis1Minuto, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(Visibilidad_270001_2019_2025_3horas)
+
+```
+
+## JUNTAR POR 6 HORAS
+
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+Visibilidad_270001_2019_2025_6horas <- Visibilidad_270001_2019_2025 %>%
+  # 1) Seleccionar las columnas necesarias
+  select(codigoNacional, momento, vis1Minuto) %>%
+  # 2) Convertir 'momento' a POSIXct y “pisar” al bloque de 6 horas
+  mutate(
+    momento = as.POSIXct(momento, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    momento = floor_date(momento, unit = "6 hours")
+  ) %>%
+  # 3) Agrupar por estación y bloque de 6 h, y calcular el promedio de vis1Minuto
+  group_by(codigoNacional, momento) %>%
+  summarise(
+    vis6Horas = mean(vis1Minuto, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Vista previa
+head(Visibilidad_270001_2019_2025_6horas)
+
+```
+
+
+# FINAL
+
+## BASES HORA
+
+```{r}
+library(dplyr)
+library(purrr)
+
+# Lista de data.frames agregados cada 1 hora
+dfs_1h <- list(
+  Agua   = Agua_Caida_270001_2019_2025_horaria,
+  Temp   = Temperatura_270001_2019_2025_horaria,
+  PH     = PresionHumedad_270001_2019_2025_horaria,
+  Viento = Viento_270001_2019_2025_horaria,
+  Optico = RangoOpticoMeteorologico_270001_2019_2025_horaria,
+  Visib  = Visibilidad_270001_2019_2025_horaria,
+  Nubosidad = Nubosidad_270001_2019_2025_horaria
+)
+
+# Unir todas por codigoNacional y momento
+Isla_Pascua_1_Horas <- reduce(
+  dfs_1h,
+  full_join,
+  by = c("codigoNacional", "momento")
+)
+
+# Verificar la estructura de la tabla resultante
+glimpse(Isla_Pascua_1_Horas)
+
+```
+
+```{r}
+
+library(dplyr)
+library(lubridate)
+
+# Si quieres forzar etiquetas de mes en español sin tocar el locale de todo el sistema:
+meses_es <- c(
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+)
+
+Isla_Pascua_1_Horas <- Isla_Pascua_1_Horas %>%
+  mutate(
+    # 1) Extraer mes numérico y luego mapear al nombre en español
+    mes = meses_es[month(momento)],
+    # 2) Calcular un valor mes-día para determinar estación
+    mmdd = month(momento) * 100 + day(momento),
+    estacion = case_when(
+      mmdd >= 1221 | mmdd <  321 ~ "Verano",
+      mmdd >=  321 & mmdd <  621 ~ "Otoño",
+      mmdd >=  621 & mmdd <  921 ~ "Invierno",
+      TRUE                        ~ "Primavera"
+    )
+  ) %>%
+  select(-mmdd)
+
+# Verifica resultado
+head(Isla_Pascua_1_Horas)
+
+
+```
+
+```{r}
+
+# Instalar y cargar writexl (si no lo tienes)
+# install.packages("writexl")
+library(writexl)
+
+# Exportar a Excel con el nombre solicitado
+write_xlsx(
+  Isla_Pascua_1_Horas,
+  path = "C:/Users/angel/Documents/ISLA_PASCUA/Isla_Pascua_Meteorologia_1Horas(9).xlsx"
+)
+
+```
+
+## BASES 2 HORAS
+
+```{r}
+library(dplyr)
+library(purrr)
+
+# Lista de data.frames agregados cada 2 horas
+dfs_2h <- list(
+  Agua   = Agua_Caida_270001_2019_2025_2horas,
+  Temp   = Temperatura_270001_2019_2025_2horas,
+  PH     = PresionHumedad_270001_2019_2025_2horas,
+  Viento = Viento_270001_2019_2025_2horas,
+  Optico = RangoOpticoMeteorologico_270001_2019_2025_2horas,
+  Visib  = Visibilidad_270001_2019_2025_2horas
+)
+
+# Unir todas por codigoNacional y momento
+Isla_Pascua_2_Horas <- reduce(
+  dfs_2h,
+  full_join,
+  by = c("codigoNacional", "momento")
+)
+
+# Verifica la estructura
+glimpse(Isla_Pascua_2_Horas)
+
+```
+
+```{r}
+
+# Instalar y cargar writexl (si no lo tienes)
+# install.packages("writexl")
+library(writexl)
+
+# Exportar a Excel con el nombre solicitado
+write_xlsx(
+  Isla_Pascua_2_Horas,
+  path = "C:/Users/angel/Documents/ISLA_PASCUA/Isla_Pascua_Meteorologia_2Horas.xlsx"
+)
+
+```
+
+## BASES 3 HORAS
+
+```{r}
+library(dplyr)
+library(purrr)
+
+# Lista de data.frames agregados cada 3 horas
+dfs_3h <- list(
+  Agua   = Agua_Caida_270001_2019_2025_3horas,
+  Temp   = Temperatura_270001_2019_2025_3horas,
+  PH     = PresionHumedad_270001_2019_2025_3horas,
+  Viento = Viento_270001_2019_2025_3horas,
+  Optico = RangoOpticoMeteorologico_270001_2019_2025_3horas,
+  Visib  = Visibilidad_270001_2019_2025_3horas
+)
+
+# Unir todas por codigoNacional y momento
+Isla_Pascua_3_Horas <- reduce(
+  dfs_3h,
+  full_join,
+  by = c("codigoNacional", "momento")
+)
+
+# Verifica la estructura de la tabla resultante
+glimpse(Isla_Pascua_3_Horas)
+
+
+```
+
+```{r}
+
+# Instalar y cargar writexl (si no lo tienes)
+# install.packages("writexl")
+library(writexl)
+
+# Exportar a Excel con el nombre solicitado
+write_xlsx(
+  Isla_Pascua_3_Horas,
+  path = "C:/Users/angel/Documents/ISLA_PASCUA/Isla_Pascua_Meteorologia_3Horas.xlsx"
+)
+
+```
+
+## BASES 6 HORAS
+
+```{r}
+library(dplyr)
+library(purrr)
+
+# Lista de data.frames a unir
+dfs_6h <- list(
+  Agua   = Agua_Caida_270001_2019_2025_6horas,
+  Temp   = Temperatura_270001_2019_2025_6horas,
+  PH     = PresionHumedad_270001_2019_2025_6horas,
+  Viento = Viento_270001_2019_2025_6horas,
+  Optico = RangoOpticoMeteorologico_270001_2019_2025_6horas,
+  Visib  = Visibilidad_270001_2019_2025_6horas,
+  Nubosidad = Nubosidad_270001_2019_2025_6horas
+)
+
+# Unir todas por codigoNacional + momento
+Isla_Pascua_6_Horas <- reduce(
+  dfs_6h,
+  full_join,
+  by = c("codigoNacional", "momento")
+)
+
+library(dplyr)
+library(lubridate)
+library(stringr)
+
+
+
+
+
+# Verifica que cada variable aparece una sola vez
+glimpse(Isla_Pascua_6_Horas)
+
+
+```
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+# Si quieres forzar etiquetas de mes en español sin tocar el locale de todo el sistema:
+meses_es <- c(
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+)
+
+Isla_Pascua_6_Horas <- Isla_Pascua_6_Horas %>%
+  mutate(
+    # 1) Extraer mes numérico y luego mapear al nombre en español
+    mes = meses_es[month(momento)],
+    # 2) Calcular un valor mes-día para determinar estación
+    mmdd = month(momento) * 100 + day(momento),
+    estacion = case_when(
+      mmdd >= 1221 | mmdd <  321 ~ "Verano",
+      mmdd >=  321 & mmdd <  621 ~ "Otoño",
+      mmdd >=  621 & mmdd <  921 ~ "Invierno",
+      TRUE                        ~ "Primavera"
+    )
+  ) %>%
+  select(-mmdd)
+
+# Verifica resultado
+head(Isla_Pascua_6_Horas)
+
+
+```
+
+
+```{r}
+
+# Instalar y cargar writexl (si no lo tienes)
+# install.packages("writexl")
+library(writexl)
+
+# Exportar a Excel con el nombre solicitado
+write_xlsx(
+  Isla_Pascua_6_Horas,
+  path = "C:/Users/angel/Documents/ISLA_PASCUA/Isla_Pascua_Meteorologia_6Horas.xlsx"
+)
+
+```
+
+
+
+```{r}
+
+
+```
+
+
